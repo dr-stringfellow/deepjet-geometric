@@ -1,9 +1,11 @@
+import sklearn
+
 from deepjet_geometric.datasets import DeepJetCoreV1
 from torch_geometric.data import DataLoader
 
 import os
 
-test = DeepJetCoreV1(os.path.join(os.getcwd(), 'dummy_data'))
+test = DeepJetCoreV1("/data/t3home000/bmaier/tor/")#os.path.join(os.getcwd(), 'dummy_data'))
 
 load_train = DataLoader(test, batch_size=20, shuffle=True,
                         follow_batch=['x_track', 'x_sv'])
@@ -55,6 +57,8 @@ class Net(nn.Module):
         
         return out, batch
         
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 dummy = Net()
 dummy.eval() # just for example
 

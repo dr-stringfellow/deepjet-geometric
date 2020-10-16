@@ -104,7 +104,7 @@ class DeepJetCoreV1(Dataset):
 
     def get(self, idx):
         file_idx = np.searchsorted(self.strides, idx) - 1
-        idx_in_file = idx - self.strides[max(0, file_idx)]
+        idx_in_file = idx - self.strides[max(0, file_idx)] - 1
         if file_idx >= self.strides.size:
             raise Exception(f'{idx} is beyond the end of the event list {self.strides[-1]}')
         edge_index = torch.empty((2,0), dtype=torch.long)
