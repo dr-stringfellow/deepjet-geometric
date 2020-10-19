@@ -8,9 +8,9 @@ import os
 data_train = DeepJetCoreV1("/data/t3home000/bmaier/tor/train/")
 data_test = DeepJetCoreV1("/data/t3home000/bmaier/tor/test/")
 
-train_loader = DataLoader(data_train, batch_size=800, shuffle=False,
+train_loader = DataLoader(data_train, batch_size=600, shuffle=True,
                           follow_batch=['x_track', 'x_sv'])
-test_loader = DataLoader(data_test, batch_size=800, shuffle=True,
+test_loader = DataLoader(data_test, batch_size=600, shuffle=True,
                          follow_batch=['x_track', 'x_sv'])
 
 import torch
@@ -23,7 +23,7 @@ from torch.nn import Sequential, Linear
 import utils
 
 MAXSTEP = 10
-BATCHSIZE = 800
+BATCHSIZE = 600
 OUTPUT = '/home/bmaier/public_html/figs/graphb/v1/'
 model_dir = '/data/t3home000/bmaier/graphb/v0/'
 
@@ -98,22 +98,42 @@ def train():
 
     total_loss = 0
     counter = 0
+
+    hist_dict_s = {}
+    hist_dict_b = {}
+
     for data in train_loader:
         counter += 1
         print(str(counter*BATCHSIZE)+' / '+str(len(train_loader.dataset)))
         data = data.to(device)
         optimizer.zero_grad()
         out = dummy(data.x_sv,data.x_track,data.x_sv_batch,data.x_track_batch)
-        print(data.x_track)
+        '''
+        for i in range(8):
+            if "%i" %i not in hist_dict_s:
+                tmp_hist = utils.NH1(np.arange(np.amin(data[data.y.bool()].x_track[:,i].detach().cpu().numpy()),np.amax(data[data.y.bool()].x_track[:,i].detach().cpu().numpy()),(np.amax(data[data.y.bool()].x_track[:,i].detach().cpu().numpy())-np.amin(data[data.y.bool()].x_track[:,i].detach().cpu().numpy()))/20))
+                hist_dict_s["%i" %i] = tmp_hist
+                hist_dict_b["%i" %i] = tmp_hist
+                #print(~data.y)
+                #print(data.y)
+                
+                hist_dict_s["%i" %i].fill_array(data[~data.y.bool()].x_track[:,i].detach().cpu().numpy())
+                hist_dict_b["%i" %i].fill_array(data[data.y.bool()].x_track[:,i].detach().cpu().numpy())
+            else:
+                hist_dict_s["%i" %i].fill_array(data[~data.y.bool()].x_track[:,i].detach().cpu().numpy())
+                hist_dict_b["%i" %i].fill_array(data[data.y.bool()].x_track[:,i].detach().cpu().numpy())
+        '''
+        #print(data.x_track)
         loss = F.binary_cross_entropy_with_logits(torch.squeeze(out[0]), data.y.float())
         loss.backward()
         total_loss += loss.item()
         optimizer.step()
-        if counter*BATCHSIZE > 20000:
+        if counter*BATCHSIZE > 30000:
+            print("Now returning")
             break
 
     #return total_loss / MAXSTEP*BATCHSIZE
-    return total_loss / len(train_loader.dataset)
+    return total_loss / len(train_loader.dataset)#, hist_dict_s, hist_dict_b
 
 def test(test_loader):
     dummy.eval()
@@ -121,23 +141,23 @@ def test(test_loader):
     correct = 0
     counter = 0
 
-    hists = utils.NH1(np.arange(-0.1,1.1,0.05))
-    histb = utils.NH1(np.arange(-0.1,1.1,0.05))
+    hists = utils.NH1(np.arange(-0.1,1.1,0.01))
+    histb = utils.NH1(np.arange(-0.1,1.1,0.01))
 
     for data in test_loader:
         data = data.to(device)
         with torch.no_grad():
             pred = dummy(data.x_sv,data.x_track,data.x_sv_batch,data.x_track_batch)#.max(dim=1)[1]
             pred = torch.sigmoid(pred[0])
-            print(data.x_track)
+            #print(data.x_track)
 
-        hists.fill_array(pred[~data.y].detach().cpu().numpy(), weights=None)
-        histb.fill_array(pred[data.y].detach().cpu().numpy(), weights=None)
+        hists.fill_array(pred[data.y.bool()].detach().cpu().numpy(), weights=None)
+        histb.fill_array(pred[~data.y.bool()].detach().cpu().numpy(), weights=None)
 
         correct += torch.round(pred).eq(data.y).sum().item()
         counter += 1
 
-        if counter*BATCHSIZE > 20000:
+        if counter*BATCHSIZE > 30000:
             break
 
     #return float(correct) / MAXSTEP*BATCHSIZE, hists, histb
@@ -145,16 +165,27 @@ def test(test_loader):
 
 for epoch in range(1, 50):
     loss = train()
+    #loss, input_vars_s, input_vars_b = train()
     test_acc, hists, histb = test(test_loader)
     scheduler.step()
 
     p = utils.Plotter()
-    #hists.scale()
-    #histb.scale()
+    hists.scale()
+    histb.scale()
     p.clear()
     p.add_hist(hists, 'Hbb', 'indianred')
     p.add_hist(histb, 'QCD', 'cornflowerblue')
     p.plot(xlabel = 'Network score', ylabel = 'Arbitrary units', output=OUTPUT+'{0:0=3d}'.format(epoch)+'_graphb_score')
+    
+    '''
+    for i in range(8):
+        p.clear()
+        input_vars_s["%i"%i].scale()
+        input_vars_b["%i"%i].scale()
+        p.add_hist(input_vars_s["%i"%i], 'Hbb', 'indianred')
+        p.add_hist(input_vars_b["%i"%i], 'QCD', 'cornflowerblue')
+        p.plot(xlabel = 'Network score', ylabel = 'Arbitrary units', output=OUTPUT+'{0:0=3d}'.format(epoch)+'_%i'%i)
+    '''    
 
     hists_hbb = {'NN':hists}
     hists_qcd = {'NN':histb}
